@@ -8,6 +8,8 @@
 #include <SDL_ttf.h>
 #include <SDL2/SDL_image.h>
 
+#include <unistd.h>
+
 #define WIDTH 800
 #define HEIGHT 640
 
@@ -59,6 +61,7 @@ void renderFiles(SDL_Renderer *renderer, std::vector<FileEntry*> &file_list, Pag
 void createPagingButtons(SDL_Renderer *renderer, Paging *paging, TTF_Font *font);
 void renderPaging(SDL_Renderer *renderer, Paging *paging, TTF_Font *font);
 void mousePress(int mouse_x, int mouse_y, uint8_t button, SDL_Renderer *renderer, std::vector<FileEntry*> &file_list, TTF_Font *font, SDL_Color color, Paging *paging, FileImages *fileImages);
+void openFile(const char *path);
 int drawHighlight(int mouse_x, int mouse_y, SDL_Renderer *renderer, std::vector<FileEntry*> &file_list, int highlighted, Paging *paging);
 bool fileEntryComparator(const FileEntry *a, const FileEntry *b);
 void drawRectFile(SDL_Renderer *renderer, FileEntry* file, SDL_Color color);
@@ -356,12 +359,12 @@ void mousePress(int mouse_x, int mouse_y, uint8_t button, SDL_Renderer *renderer
             mouse_y >= file_list[i]->click_area[1] &&
             mouse_y <= file_list[i]->click_area[1] + file_list[i]->click_area[3])
         {
+            const char *path = file_list[i]->full_path.c_str();
             if(file_list[i]->is_directory){
-                const char *path = file_list[i]->full_path.c_str();
                 changeDirectory(file_list, path, renderer, font, color, paging, fileImages);
                 break;
             } else {
-                std::cout << "Open file" << std::endl;
+                openFile(path);
             }
         }
     }
@@ -394,6 +397,13 @@ void mousePress(int mouse_x, int mouse_y, uint8_t button, SDL_Renderer *renderer
     }
 }
 
+void openFile(const char *path){
+    if(fork() == 0){
+        execl("/usr/bin/xdg-open", "xdg-open", path, (char *) NULL);
+        exit(1);
+    }
+}
+
 int drawHighlight(int mouse_x, int mouse_y, SDL_Renderer *renderer, std::vector<FileEntry*> &file_list, int highlighted, Paging *paging) {
     int i;
     for (i = paging->start; i < paging->end; i++) {
@@ -403,6 +413,10 @@ int drawHighlight(int mouse_x, int mouse_y, SDL_Renderer *renderer, std::vector<
             mouse_y <= file_list[i]->click_area[1] + file_list[i]->click_area[3])
         {
             if(i != highlighted){
+                if(highlighted > -1){
+                    SDL_Color color = {255, 255, 255};
+                    drawRectFile(renderer, file_list[highlighted], color);
+                }
                 SDL_Color color = {240, 119, 70};
                 drawRectFile(renderer, file_list[i], color);
             }
@@ -431,10 +445,8 @@ int drawHighlight(int mouse_x, int mouse_y, SDL_Renderer *renderer, std::vector<
         return -3;
     }
     if(highlighted > -1){
-        for (i = paging->start; i < paging->end; i++) {
-            SDL_Color color = {255, 255, 255};
-            drawRectFile(renderer, file_list[i], color);
-        }
+        SDL_Color color = {255, 255, 255};
+        drawRectFile(renderer, file_list[highlighted], color);
     } else if(highlighted < -1) {
         SDL_Color color = {96, 93, 83};
         drawRectButton(renderer, 0, color, paging);
