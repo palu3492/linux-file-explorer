@@ -27,6 +27,11 @@ typedef struct FileEntry {
     int click_area[4];
 } FileEntry;
 
+typedef struct FileImages {
+    SDL_Texture *file_texture;
+    SDL_Texture *directory_texture;
+} FileImages;
+
 typedef struct Paging {
     int pages;
     int current_page;
@@ -45,14 +50,15 @@ typedef struct Paging {
 } Paging;
 
 void initialize_renderer(SDL_Renderer *renderer, TTF_Font **font);
-void changeDirectory(std::vector<FileEntry*> &file_list, const char *path, SDL_Renderer *renderer, TTF_Font *font, SDL_Color color, Paging *paging);
+void changeDirectory(std::vector<FileEntry*> &file_list, const char *path, SDL_Renderer *renderer, TTF_Font *font, SDL_Color color, Paging *paging, FileImages *fileImages);
 std::vector<FileEntry*> loadDirectoryFiles(const char *dirname, Paging *paging);
 void changePageInfo(Paging *paging);
 void createFilenameTextures(std::vector<FileEntry*> &file_list, TTF_Font *font, SDL_Color text_color, SDL_Renderer *renderer, Paging *paging);
-void renderFiles(SDL_Renderer *renderer, std::vector<FileEntry*> &file_list, Paging *paging);
+void createFileImageTextures(SDL_Renderer *renderer, FileImages *fileImages);
+void renderFiles(SDL_Renderer *renderer, std::vector<FileEntry*> &file_list, Paging *paging, FileImages *fileImages);
 void createPagingButtons(SDL_Renderer *renderer, Paging *paging, TTF_Font *font);
 void renderPaging(SDL_Renderer *renderer, Paging *paging, TTF_Font *font);
-void mousePress(int mouse_x, int mouse_y, uint8_t button, SDL_Renderer *renderer, std::vector<FileEntry*> &file_list, TTF_Font *font, SDL_Color color, Paging *paging);
+void mousePress(int mouse_x, int mouse_y, uint8_t button, SDL_Renderer *renderer, std::vector<FileEntry*> &file_list, TTF_Font *font, SDL_Color color, Paging *paging, FileImages *fileImages);
 int drawHighlight(int mouse_x, int mouse_y, SDL_Renderer *renderer, std::vector<FileEntry*> &file_list, int highlighted, Paging *paging);
 bool fileEntryComparator(const FileEntry *a, const FileEntry *b);
 void drawRectFile(SDL_Renderer *renderer, FileEntry* file, SDL_Color color);
@@ -76,6 +82,9 @@ int main(int argc, char **argv)
     TTF_Font *font;
     initialize_renderer(renderer, &font);
 
+    FileImages *fileImages = new FileImages();
+    createFileImageTextures(renderer, fileImages);
+
     // Setup paging
     Paging *paging = new Paging();
     paging->current_page = 0;
@@ -88,7 +97,7 @@ int main(int argc, char **argv)
     std::vector<FileEntry*> file_list;
     char* home_path = getenv("HOME");
     SDL_Color text_color = {68, 67, 73};
-    changeDirectory(file_list, home_path, renderer, font, text_color, paging);
+    changeDirectory(file_list, home_path, renderer, font, text_color, paging, fileImages);
 
     int highlighted = -1;
     int mouse_x = 0;
@@ -107,7 +116,7 @@ int main(int argc, char **argv)
                 highlighted = drawHighlight(mouse_x, mouse_y, renderer, file_list, highlighted, paging);
                 break;
             case SDL_MOUSEBUTTONDOWN:
-                mousePress(mouse_x, mouse_y, event.button.button, renderer, file_list, font, text_color, paging);
+                mousePress(mouse_x, mouse_y, event.button.button, renderer, file_list, font, text_color, paging, fileImages);
                 highlighted = -1;
                 highlighted = drawHighlight(mouse_x, mouse_y, renderer, file_list, highlighted, paging);
                 break;
@@ -138,13 +147,13 @@ void initialize_renderer(SDL_Renderer *renderer, TTF_Font **font){
 
 }
 
-void changeDirectory(std::vector<FileEntry*> &file_list, const char *path, SDL_Renderer *renderer, TTF_Font *font, SDL_Color color, Paging *paging) {
+void changeDirectory(std::vector<FileEntry*> &file_list, const char *path, SDL_Renderer *renderer, TTF_Font *font, SDL_Color color, Paging *paging, FileImages *fileImages) {
     // get list of files in directory stored in FileEntry structs
     file_list = loadDirectoryFiles(path, paging);
     // create textures for file name text
     createFilenameTextures(file_list, font, color, renderer, paging);
     // Renders the file icon and name to window
-    renderFiles(renderer, file_list, paging);
+    renderFiles(renderer, file_list, paging, fileImages);
     // render paging elements
     renderPaging(renderer, paging, font);
 }
@@ -182,7 +191,7 @@ std::vector<FileEntry*> loadDirectoryFiles(const char *dirname, Paging *paging) 
     }
 
     std::sort(result.begin(), result.end(), fileEntryComparator);
-    
+
     paging->current_page = 0;
     paging->number_of_files = result.size();
     changePageInfo(paging);
@@ -223,7 +232,16 @@ void createFilenameTextures(std::vector<FileEntry*> &file_list, TTF_Font *font, 
     }
 }
 
-void renderFiles(SDL_Renderer *renderer, std::vector<FileEntry*> &file_list, Paging *paging) {
+void createFileImageTextures(SDL_Renderer *renderer, FileImages *fileImages){
+    const char *file = "resrc/images/folder.svg";
+    SDL_Texture *texture = IMG_LoadTexture(renderer, file);
+    fileImages->directory_texture = texture;
+    file = "resrc/images/file.svg";
+    texture = IMG_LoadTexture(renderer, file);
+    fileImages->file_texture = texture;
+}
+
+void renderFiles(SDL_Renderer *renderer, std::vector<FileEntry*> &file_list, Paging *paging, FileImages *fileImages) {
     // erase renderer content
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     SDL_RenderClear(renderer);
@@ -239,15 +257,12 @@ void renderFiles(SDL_Renderer *renderer, std::vector<FileEntry*> &file_list, Pag
         rect.w = 33;
         rect.h = 33;
         const char *file;
+
         if (file_list[i]->is_directory) {
-            file = "resrc/images/folder.svg";
+            SDL_RenderCopy(renderer, fileImages->directory_texture, NULL, &rect);
+        } else {
+            SDL_RenderCopy(renderer, fileImages->file_texture, NULL, &rect);
         }
-        else
-        {
-            file = "resrc/images/file.svg";
-        }
-        SDL_Texture *texture = IMG_LoadTexture(renderer, file);
-        SDL_RenderCopy(renderer, texture, NULL, &rect);
 
         // text
         rect.x = 85;
@@ -333,7 +348,7 @@ void renderPaging(SDL_Renderer *renderer, Paging *paging, TTF_Font *font) {
     SDL_RenderPresent(renderer);
 }
 
-void mousePress(int mouse_x, int mouse_y, uint8_t button, SDL_Renderer *renderer, std::vector<FileEntry*> &file_list, TTF_Font *font, SDL_Color color, Paging *paging) {
+void mousePress(int mouse_x, int mouse_y, uint8_t button, SDL_Renderer *renderer, std::vector<FileEntry*> &file_list, TTF_Font *font, SDL_Color color, Paging *paging, FileImages *fileImages) {
     int i;
     for (i = paging->start; i < paging->end; i++) {
         if (mouse_x >= file_list[i]->click_area[0] &&
@@ -341,9 +356,13 @@ void mousePress(int mouse_x, int mouse_y, uint8_t button, SDL_Renderer *renderer
             mouse_y >= file_list[i]->click_area[1] &&
             mouse_y <= file_list[i]->click_area[1] + file_list[i]->click_area[3])
         {
-            const char *path = file_list[i]->full_path.c_str();
-            changeDirectory(file_list, path, renderer, font, color, paging);
-            break;
+            if(file_list[i]->is_directory){
+                const char *path = file_list[i]->full_path.c_str();
+                changeDirectory(file_list, path, renderer, font, color, paging, fileImages);
+                break;
+            } else {
+                std::cout << "Open file" << std::endl;
+            }
         }
     }
     if (mouse_x >= paging->next_click_area[0] &&
@@ -355,7 +374,7 @@ void mousePress(int mouse_x, int mouse_y, uint8_t button, SDL_Renderer *renderer
             paging->current_page++;
             changePageInfo(paging);
             // Renders the file icon and name to window
-            renderFiles(renderer, file_list, paging);
+            renderFiles(renderer, file_list, paging, fileImages);
             // render paging elements
             renderPaging(renderer, paging, font);
         }
@@ -368,7 +387,7 @@ void mousePress(int mouse_x, int mouse_y, uint8_t button, SDL_Renderer *renderer
             paging->current_page--;
             changePageInfo(paging);
             // Renders the file icon and name to window
-            renderFiles(renderer, file_list, paging);
+            renderFiles(renderer, file_list, paging, fileImages);
             // render paging elements
             renderPaging(renderer, paging, font);
         }
